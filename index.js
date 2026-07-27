@@ -74,11 +74,10 @@ app.get("/items/:id", async (req, res) => {
 // 4. UPDATE (PUT)
 app.put("/items/:id", async (req, res) => {
   const { id } = req.params;
-  const { name, description } = req.body;
 
   const { data, error } = await supabase
     .from("items")
-    .update({ name, description })
+    .update(req.body)
     .eq("id", id)
     .select();
 
