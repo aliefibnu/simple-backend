@@ -72,7 +72,7 @@ app.get("/items/:id", async (req, res) => {
 });
 
 // 4. UPDATE (PUT)
-app.put("/items/:id", async (req, res) => {
+app.patch("/items/:id", async (req, res) => {
   const { id } = req.params;
 
   const { data, error } = await supabase
