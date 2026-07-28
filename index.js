@@ -52,7 +52,7 @@ app.get("/items", async (req, res) => {
   const { data, error } = await supabase
     .from("items")
     .select("*")
-    .order("id", { ascending: true });
+    .order("id", { ascending: false });
 
   if (error) return sendResponse(res, false, null, error.message, 400);
   return sendResponse(res, true, data);
