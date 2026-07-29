@@ -1,19 +1,19 @@
-require("dotenv").config();
+require("@dotenvx/dotenvx").config();
 const express = require("express");
 const cors = require("cors");
+const fileupload = require("express-fileupload");
 const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
 app.use(cors());
-app.use(express.json()); // Menerima request JSON
+app.use(fileupload());
+app.use(express.json());
 
-// Inisialisasi Supabase
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY,
 );
 
-// Helper function untuk format response
 const sendResponse = (
   res,
   success,
@@ -28,26 +28,38 @@ const sendResponse = (
   return res.status(statusCode).json(response);
 };
 
-// --- ROUTES CRUD ---
-
-// 0. Root Check
 app.get("/", (req, res) => {
   sendResponse(res, true, "API is running on Vercel!");
 });
 
-// 1. CREATE (POST)
 app.post("/items", async (req, res) => {
   const { name, description } = req.body;
+  const file = req.files["image"];
+  let fileName = file ? `${Date.now()}_${file.name}` : null;
+  if (file) {
+    const { data: storageData, error: storageError } = supabase.storage
+      .from("simple-backend")
+      .upload(fileName, file.data, {
+        contentType: file.mimetype,
+        upsert: true,
+      });
+
+    if (storageError) throw new Error(`Storage Error: ${storageError.message}`);
+    const { data: publicUrlData } = supabase.storage
+      .from("simple-backend")
+      .getPublicUrl(fileName);
+
+    fileName = publicUrlData.publicUrl;
+  }
   const { data, error } = await supabase
     .from("items")
-    .insert([{ name, description }])
+    .insert([{ name, description, image_path: fileName }])
     .select();
 
   if (error) return sendResponse(res, false, null, error.message, 400);
   return sendResponse(res, true, data[0], null, 201);
 });
 
-// 2. READ ALL (GET)
 app.get("/items", async (req, res) => {
   const { data, error } = await supabase
     .from("items")
@@ -58,7 +70,6 @@ app.get("/items", async (req, res) => {
   return sendResponse(res, true, data);
 });
 
-// 3. READ ONE (GET BY ID)
 app.get("/items/:id", async (req, res) => {
   const { id } = req.params;
   const { data, error } = await supabase
@@ -71,13 +82,33 @@ app.get("/items/:id", async (req, res) => {
   return sendResponse(res, true, data);
 });
 
-// 4. UPDATE (PUT)
 app.patch("/items/:id", async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.params,
+    payload = req.body,
+    file = req.files["image"];
+  let fileName = file ? `${Date.now()}_${file.name}` : null;
+
+  if (file) {
+    const upload = await supabase.storage
+      .from("simple-backend")
+      .upload(fileName, file.data, {
+        contentType: file.mimetype,
+        upsert: true,
+      });
+
+    if (upload.error)
+      throw new Error(`Storage Error : ${upload.error.message}`);
+
+    const publicImage = await supabase.storage
+      .from("simple-backend")
+      .getPublicUrl(fileName);
+
+    payload["image_path"] = publicImage.data.publicUrl;
+  }
 
   const { data, error } = await supabase
     .from("items")
-    .update(req.body)
+    .update(payload)
     .eq("id", id)
     .select();
 
@@ -88,7 +119,6 @@ app.patch("/items/:id", async (req, res) => {
   return sendResponse(res, true, data[0]);
 });
 
-// 5. DELETE (DELETE)
 app.delete("/items/:id", async (req, res) => {
   const { id } = req.params;
   const { data, error } = await supabase
@@ -104,7 +134,6 @@ app.delete("/items/:id", async (req, res) => {
   return sendResponse(res, true, "Item deleted successfully");
 });
 
-// Vercel tidak butuh app.listen, tapi untuk test lokal di Xubuntu kita butuh:
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== "production") {
   app.listen(PORT, () =>
@@ -112,5 +141,4 @@ if (process.env.NODE_ENV !== "production") {
   );
 }
 
-// Export app agar bisa dibaca oleh Vercel Serverless Function
 module.exports = app;
