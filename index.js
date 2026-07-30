@@ -29,7 +29,7 @@ const sendResponse = (
 };
 
 app.get("/", (req, res) => {
-  sendResponse(res, true, "API is running on Vercel!");
+  res.redirect("/items");
 });
 
 app.post("/items", async (req, res) => {
@@ -37,7 +37,7 @@ app.post("/items", async (req, res) => {
   const file = req.files["image"];
   let fileName = file ? `${Date.now()}_${file.name}` : null;
   if (file) {
-    const { data: storageData, error: storageError } = supabase.storage
+    const { data: storageData, error: storageError } = await supabase.storage
       .from("simple-backend")
       .upload(fileName, file.data, {
         contentType: file.mimetype,
@@ -45,7 +45,7 @@ app.post("/items", async (req, res) => {
       });
 
     if (storageError) throw new Error(`Storage Error: ${storageError.message}`);
-    const { data: publicUrlData } = supabase.storage
+    const { data: publicUrlData } = await supabase.storage
       .from("simple-backend")
       .getPublicUrl(fileName);
 
@@ -89,6 +89,17 @@ app.patch("/items/:id", async (req, res) => {
   let fileName = file ? `${Date.now()}_${file.name}` : null;
 
   if (file) {
+    const oldFile = await supabase
+      .from("items")
+      .select("image_path")
+      .eq("id", id)
+      .single()
+      .then(({ data }) => data.image_path.split("/").at(-1));
+
+    await supabase.storage
+      .from("simple-backend")
+      .remove(decodeURIComponent(oldFile));
+
     const upload = await supabase.storage
       .from("simple-backend")
       .upload(fileName, file.data, {
@@ -121,6 +132,16 @@ app.patch("/items/:id", async (req, res) => {
 
 app.delete("/items/:id", async (req, res) => {
   const { id } = req.params;
+  const file = await supabase
+    .from("items")
+    .select("image_path")
+    .eq("id", id)
+    .single()
+    .then(({ data }) => data.image_path.split("/").at(-1));
+  await supabase.storage
+    .from("simple-backend")
+    .remove(decodeURIComponent(file));
+
   const { data, error } = await supabase
     .from("items")
     .delete()
